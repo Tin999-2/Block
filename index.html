@@ -2,25 +2,45 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>シンプル・ブロック崩し</title>
+    <title>ジオキャッシング・ブロック崩し</title>
     <style>
-        body { background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; color: white; font-family: sans-serif; overflow: hidden; }
+        body { background: #222; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; color: white; font-family: sans-serif; overflow: hidden; }
         canvas { border: 2px solid #fff; background: #000; box-shadow: 0 0 20px rgba(255,255,255,0.2); }
-        .info { position: absolute; top: 20px; text-align: center; }
+        .info { text-align: center; margin-bottom: 10px; }
+        /* 座標表示のスタイル */
+        #result-screen {
+            display: none;
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9);
+            border: 3px solid #2ecc71;
+            padding: 20px;
+            text-align: center;
+            border-radius: 10px;
+            z-index: 100;
+        }
+        .coord { font-family: monospace; font-size: 24px; color: #2ecc71; margin-top: 10px; }
     </style>
 </head>
 <body>
+
     <div class="info">
-        <h2>ブロック崩し</h2>
-        <p>マウス（または指）を左右に動かして開始！</p>
+        <h2>Mission: ブロックをすべて壊せ！</h2>
+        <p>マウス（または指）でパドルを操作してください</p>
     </div>
+
     <canvas id="gameCanvas" width="480" height="320"></canvas>
+
+    <div id="result-screen">
+        <h2 style="color: #2ecc71;">CLEAR!!</h2>
+        <p>最終座標を見つけた：</p>
+        <div class="coord">N 35 45.567<br>E 139 45.687</div>
+        <button onclick="location.reload()" style="margin-top:15px; padding:10px;">もう一度遊ぶ</button>
+    </div>
 
     <script>
         const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
 
-        // ゲームの設定
         let ballRadius = 8;
         let x = canvas.width / 2;
         let y = canvas.height - 30;
@@ -31,6 +51,7 @@
         let paddleWidth = 75;
         let paddleX = (canvas.width - paddleWidth) / 2;
 
+        // ブロックの設定（テスト用に少なく設定しています。増やす場合は数値を調整してください）
         let brickRowCount = 3;
         let brickColumnCount = 5;
         let brickWidth = 75;
@@ -38,6 +59,10 @@
         let brickPadding = 10;
         let brickOffsetTop = 30;
         let brickOffsetLeft = 30;
+
+        let totalBricks = brickRowCount * brickColumnCount;
+        let clearedBricks = 0;
+        let isGameOver = false;
 
         let bricks = [];
         for(let c=0; c<brickColumnCount; c++) {
@@ -47,8 +72,8 @@
             }
         }
 
-        // マウス操作のイベントリスナー
         document.addEventListener("mousemove", mouseMoveHandler, false);
+        document.addEventListener("touchmove", touchMoveHandler, {passive: false});
 
         function mouseMoveHandler(e) {
             let relativeX = e.clientX - canvas.offsetLeft;
@@ -57,80 +82,7 @@
             }
         }
 
-        // 衝突判定
-        function collisionDetection() {
-            for(let c=0; c<brickColumnCount; c++) {
-                for(let r=0; r<brickRowCount; r++) {
-                    let b = bricks[c][r];
-                    if(b.status == 1) {
-                        if(x > b.x && x < b.x + brickWidth && y > b.y && y < b.y + brickHeight) {
-                            dy = -dy;
-                            b.status = 0;
-                        }
-                    }
-                }
-            }
-        }
-
-        // 描画
-        function drawBall() {
-            ctx.beginPath();
-            ctx.arc(x, y, ballRadius, 0, Math.PI*2);
-            ctx.fillStyle = "#0095DD";
-            ctx.fill();
-            ctx.closePath();
-        }
-
-        function drawPaddle() {
-            ctx.beginPath();
-            ctx.rect(paddleX, canvas.height - paddleHeight, paddleWidth, paddleHeight);
-            ctx.fillStyle = "#0095DD";
-            ctx.fill();
-            ctx.closePath();
-        }
-
-        function drawBricks() {
-            for(let c=0; c<brickColumnCount; c++) {
-                for(let r=0; r<brickRowCount; r++) {
-                    if(bricks[c][r].status == 1) {
-                        let brickX = (c*(brickWidth+brickPadding)) + brickOffsetLeft;
-                        let brickY = (r*(brickHeight+brickPadding)) + brickOffsetTop;
-                        bricks[c][r].x = brickX;
-                        bricks[c][r].y = brickY;
-                        ctx.beginPath();
-                        ctx.rect(brickX, brickY, brickWidth, brickHeight);
-                        ctx.fillStyle = "#ff5722";
-                        ctx.fill();
-                        ctx.closePath();
-                    }
-                }
-            }
-        }
-
-        function draw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawBricks();
-            drawBall();
-            drawPaddle();
-            collisionDetection();
-
-            // 壁との反射
-            if(x + dx > canvas.width - ballRadius || x + dx < ballRadius) dx = -dx;
-            if(y + dy < ballRadius) dy = -dy;
-            else if(y + dy > canvas.height - ballRadius) {
-                if(x > paddleX && x < paddleX + paddleWidth) {
-                    dy = -dy;
-                } else {
-                    document.location.reload(); // ゲームオーバーでリロード
-                }
-            }
-
-            x += dx;
-            y += dy;
-            requestAnimationFrame(draw);
-        }
-
-        draw();
-    </script>
-</body>
-</html>
+        function touchMoveHandler(e) {
+            e.preventDefault();
+            let touch = e.touches[0];
+            let relativeX = touch.clientX - canvas.
