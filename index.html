@@ -1,88 +1,88 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html>
 <head>
     <meta charset="UTF-8">
-    <title>ジオキャッシング・ブロック崩し</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Game</title>
     <style>
-        body { background: #222; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; color: white; font-family: sans-serif; overflow: hidden; }
-        canvas { border: 2px solid #fff; background: #000; box-shadow: 0 0 20px rgba(255,255,255,0.2); }
-        .info { text-align: center; margin-bottom: 10px; }
-        /* 座標表示のスタイル */
-        #result-screen {
-            display: none;
-            position: absolute;
-            background: rgba(0, 0, 0, 0.9);
-            border: 3px solid #2ecc71;
-            padding: 20px;
-            text-align: center;
-            border-radius: 10px;
-            z-index: 100;
-        }
-        .coord { font-family: monospace; font-size: 24px; color: #2ecc71; margin-top: 10px; }
+        body { background: #1a1a1a; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; color: white; overflow: hidden; touch-action: none; }
+        canvas { background: #000; border: 2px solid #fff; width: 95vw; max-width: 480px; height: auto; }
+        .ui { display: none; position: absolute; background: rgba(0,0,0,0.95); padding: 30px; text-align: center; border: 3px solid #fff; z-index: 100; }
     </style>
 </head>
 <body>
-
-    <div class="info">
-        <h2>Mission: ブロックをすべて壊せ！</h2>
-        <p>マウス（または指）でパドルを操作してください</p>
-    </div>
-
-    <canvas id="gameCanvas" width="480" height="320"></canvas>
-
-    <div id="result-screen">
-        <h2 style="color: #2ecc71;">CLEAR!!</h2>
-        <p>最終座標を見つけた：</p>
-        <div class="coord">N 35 45.567<br>E 139 45.687</div>
-        <button onclick="location.reload()" style="margin-top:15px; padding:10px;">もう一度遊ぶ</button>
-    </div>
+    <div style="margin-bottom:10px;">Destroy All the Blocks</div>
+    <canvas id="g" width="480" height="480"></canvas>
+    
+    <div id="clr" class="ui"><h2>COMPLETE!</h2><p>Keyword: wall</p><button onclick="location.reload()">Retry</button></div>
+    <div id="ovr" class="ui"><h2>GAME OVER</h2><button onclick="location.reload()">Retry</button></div>
 
     <script>
-        const canvas = document.getElementById("gameCanvas");
-        const ctx = canvas.getContext("2d");
+    var cvs = document.getElementById("g");
+    var ctx = cvs.getContext("2d");
+    var x = 240, y = 440, dx = 3, dy = -3, pX = 190, active = true, count = 0;
+    var rows = 5, cols = 8, bW = 50, bH = 20, bP = 8, bOT = 50, bOL = 12;
+    var colors = ['#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#e67e22'];
+    var bricks = [];
 
-        let ballRadius = 8;
-        let x = canvas.width / 2;
-        let y = canvas.height - 30;
-        let dx = 3;
-        let dy = -3;
+    // ブロック初期化
+    for(var c=0; c<cols; c++) {
+        bricks[c] = [];
+        for(var r=0; r<rows; r++) bricks[c][r] = { status: 1 };
+    }
+
+    // シンプルな操作
+    function move(e) {
+        var rect = cvs.getBoundingClientRect();
+        var cx = (e.touches ? e.touches[0].clientX : e.clientX);
+        pX = (cx - rect.left) * (480 / rect.width) - 50;
+    }
+    window.onmousemove = move;
+    window.ontouchmove = move;
+
+    function draw() {
+        if(!active) return;
+        ctx.clearRect(0, 0, 480, 480);
         
-        let paddleHeight = 10;
-        let paddleWidth = 75;
-        let paddleX = (canvas.width - paddleWidth) / 2;
-
-        // ブロックの設定（テスト用に少なく設定しています。増やす場合は数値を調整してください）
-        let brickRowCount = 3;
-        let brickColumnCount = 5;
-        let brickWidth = 75;
-        let brickHeight = 20;
-        let brickPadding = 10;
-        let brickOffsetTop = 30;
-        let brickOffsetLeft = 30;
-
-        let totalBricks = brickRowCount * brickColumnCount;
-        let clearedBricks = 0;
-        let isGameOver = false;
-
-        let bricks = [];
-        for(let c=0; c<brickColumnCount; c++) {
-            bricks[c] = [];
-            for(let r=0; r<brickRowCount; r++) {
-                bricks[c][r] = { x: 0, y: 0, status: 1 };
+        // ブロック描画と判定
+        for(var c=0; c<cols; c++) {
+            for(var r=0; r<rows; r++) {
+                var b = bricks[c][r];
+                if(b.status == 1) {
+                    var bx = c*(bW+bP)+bOL;
+                    var by = r*(bH+bP)+bOT;
+                    ctx.fillStyle = colors[r];
+                    ctx.fillRect(bx, by, bW, bH);
+                    // 当たり判定
+                    if(x > bx && x < bx+bW && y > by && y < by+bH) {
+                        dy = -dy; b.status = 0; count++;
+                        if(count == rows*cols) { 
+                            active = false; 
+                            document.getElementById("clr").style.display="block"; 
+                        }
+                    }
+                }
             }
         }
 
-        document.addEventListener("mousemove", mouseMoveHandler, false);
-        document.addEventListener("touchmove", touchMoveHandler, {passive: false});
+        // ボール・パドル
+        ctx.fillStyle = "#fff";
+        ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI*2); ctx.fill();
+        ctx.fillRect(pX, 460, 100, 15);
 
-        function mouseMoveHandler(e) {
-            let relativeX = e.clientX - canvas.offsetLeft;
-            if(relativeX > 0 && relativeX < canvas.width) {
-                paddleX = relativeX - paddleWidth / 2;
+        // 壁とパドルの反射
+        if(x+dx > 470 || x+dx < 10) dx = -dx;
+        if(y+dy < 10) dy = -dy;
+        else if(y+dy > 450) {
+            if(x > pX && x < pX+100) { dy = -dy; y = 449; }
+            else if(y > 485) { 
+                active = false; 
+                document.getElementById("ovr").style.display="block"; 
             }
         }
-
-        function touchMoveHandler(e) {
-            e.preventDefault();
-            let touch = e.touches[0];
-            let relativeX = touch.clientX - canvas.
+        x+=dx; y+=dy;
+        requestAnimationFrame(draw);
+    }
+    draw();
+    </script>
+</body>
