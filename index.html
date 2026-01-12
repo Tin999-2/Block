@@ -34,7 +34,7 @@
     var isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
     
     // PCは 2.5（少し遅く）、スマホは 4.5（速く）に設定
-    var speed = isTouch ? 6.5 : 1.0;
+    var speed = isTouch ? 6.5 : 2.5;
     
     var x = 240, y = 440, dx = speed, dy = -speed;
     var pX = 190, active = true, count = 0;
@@ -101,6 +101,7 @@
     </script>
 </body>
 </html>
+
 
 
 
