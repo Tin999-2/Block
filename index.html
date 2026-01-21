@@ -2,45 +2,26 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Super Breakout - Vertical Edition</title>
+    <title>Super Breakout - Impact Edition</title>
     <style>
         body { 
-            margin: 0; 
-            background: #000; 
-            font-family: 'Arial', sans-serif; 
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            margin: 0; background: #000; font-family: 'Arial', sans-serif; 
+            display: flex; flex-direction: column; align-items: center; overflow-x: hidden;
         }
-        
-        /* 背景の流星Canvas */
-        #background-canvas { 
-            position: fixed; 
-            top: 0; left: 0; 
-            z-index: 0; 
-        }
-
-        /* プレイ画面の枠（ネオン風） */
+        #background-canvas { position: fixed; top: 0; left: 0; z-index: 0; }
         #gameCanvas { 
-            display: block; 
-            background: rgba(0, 0, 0, 0.8); 
-            position: relative; 
-            z-index: 1; 
-            border: 5px solid #fff;
-            box-shadow: 0 0 20px rgba(0, 212, 255, 0.6);
-            margin-top: 20px;
+            display: block; background: rgba(0, 0, 0, 0.8); position: relative; 
+            z-index: 1; border: 5px solid #fff; box-shadow: 0 0 20px rgba(0, 212, 255, 0.6);
+            margin-top: 20px; margin-bottom: 20px; /* 下にも余白を追加 */
         }
-        
         #ui-overlay {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            z-index: 10; text-align: center; color: white;
-            pointer-events: none; /* 下のボタン以外はクリックを通す */
+            z-index: 10; text-align: center; color: white; pointer-events: none;
         }
         #ui-overlay * { pointer-events: auto; }
-
         .btn {
-            padding: 15px 30px; font-size: 20px; cursor: pointer;
-            background: #00d4ff; border: none; border-radius: 5px; color: #000; font-weight: bold;
+            padding: 15px 30px; font-size: 20px; cursor: pointer; background: #00d4ff; 
+            border: none; border-radius: 5px; color: #000; font-weight: bold;
         }
         #game-info {
             position: sticky; top: 0; width: 100%; text-align: center;
@@ -60,7 +41,7 @@
     <div id="ui-overlay">
         <div id="start-screen">
             <h1 style="font-size: 48px; text-shadow: 0 0 10px #00d4ff;">SUPER BREAKOUT</h1>
-            <p>高さ2倍のロングステージへようこそ</p>
+            <p>Impact Edition</p>
             <button class="btn" onclick="startGame()">START GAME</button>
         </div>
         <div id="complete-screen" class="hidden">
@@ -78,13 +59,11 @@ const ctx = canvas.getContext("2d");
 const bgCanvas = document.getElementById("background-canvas");
 const bgCtx = bgCanvas.getContext("2d");
 
-// ゲーム設定 (高さを2倍の1200pxに設定)
 canvas.width = 800;
 canvas.height = 1200;
 bgCanvas.width = window.innerWidth;
 bgCanvas.height = window.innerHeight;
 
-// 音声設定
 const sounds = {
     paddle: new Audio('assets/sounds/paddle_hit.mp3'),
     brick: new Audio('assets/sounds/brick_hit.mp3'),
@@ -95,20 +74,22 @@ const sounds = {
 };
 sounds.bgm.loop = true;
 
-// 行ごとの色リスト
 const rowColors = ["#FF595E", "#FFCA3A", "#8AC926", "#1982C4", "#6A4C93", "#F15BB5"];
 
 let score = 0;
 let currentLevel = 1;
 let gameRunning = false;
+let shakeDuration = 0; // シェイク用変数
+
 let bricks = [];
 let particles = [];
 let powerups = [];
 let balls = [];
 
+// パドル幅を1.5倍に変更 (100 -> 150)
 const paddle = {
-    width: 100, height: 15, x: (canvas.width - 100) / 2,
-    speed: 10, dx: 0, isPenetrating: false
+    width: 150, height: 15, x: (canvas.width - 150) / 2,
+    speed: 12, dx: 0, isPenetrating: false
 };
 
 class Ball {
@@ -129,8 +110,8 @@ class Ball {
 }
 
 class Brick {
-    constructor(x, y, color) {
-        this.x = x; this.y = y; this.w = 80; this.h = 25;
+    constructor(x, y, w, h, color) {
+        this.x = x; this.y = y; this.w = w; this.h = h;
         this.status = 1; this.health = 1; this.color = color;
         this.hasItem = false;
     }
@@ -139,8 +120,8 @@ class Brick {
 class Particle {
     constructor(x, y, color) {
         this.x = x; this.y = y;
-        this.dx = (Math.random() - 0.5) * 8;
-        this.dy = (Math.random() - 0.5) * 8;
+        this.dx = (Math.random() - 0.5) * 10;
+        this.dy = (Math.random() - 0.5) * 10;
         this.life = 1.0;
         this.color = color;
     }
@@ -148,7 +129,7 @@ class Particle {
     draw() {
         ctx.globalAlpha = this.life;
         ctx.fillStyle = this.color;
-        ctx.fillRect(this.x, this.y, 4, 4);
+        ctx.fillRect(this.x, this.y, 5, 5);
         ctx.globalAlpha = 1.0;
     }
 }
@@ -181,22 +162,26 @@ function initLevel(lv) {
     bricks = [];
     const rows = 6;
     const cols = 8;
-    const padding = 10;
+    // 左右の隙間をなくすため、幅を均等割
+    const brickWidth = canvas.width / cols; 
+    const brickHeight = 30;
+    const padding = 2; // 上下の隙間のみ少し残す
     const offsetTop = 80;
-    const offsetLeft = 45;
 
     for (let c = 0; c < cols; c++) {
         for (let r = 0; r < rows; r++) {
-            // 行(r)によって色を変える
             let color = rowColors[r % rowColors.length];
-            let b = new Brick(c * (80 + padding) + offsetLeft, r * (25 + padding) + offsetTop, color);
+            let brickX = c * brickWidth;
+            let brickY = r * (brickHeight + padding) + offsetTop;
+            // Brickコンストラクタに幅と高さを渡すように変更
+            let b = new Brick(brickX, brickY, brickWidth, brickHeight, color);
             bricks.push(b);
         }
     }
 
     if (lv === 2) {
         let targets = bricks.sort(() => 0.5 - Math.random()).slice(0, 3);
-        targets.forEach(b => { b.health = 3; b.color = "#ffffff"; }); // 耐久は白に
+        targets.forEach(b => { b.health = 3; b.color = "#ffffff"; });
     } else if (lv === 3) {
         let targets = bricks.sort(() => 0.5 - Math.random()).slice(0, 6);
         targets.forEach(b => { b.hasItem = true; });
@@ -208,6 +193,7 @@ function startGame() {
     gameRunning = true;
     score = 0;
     currentLevel = 1;
+    paddle.x = (canvas.width - paddle.width) / 2;
     balls = [new Ball(canvas.width / 2, canvas.height - 50, 5, -5)];
     initLevel(1);
     sounds.bgm.play().catch(() => console.log("Audio play deferred"));
@@ -229,7 +215,7 @@ function update() {
 
         if (ball.y + ball.radius > canvas.height - paddle.height && ball.x > paddle.x && ball.x < paddle.x + paddle.width) {
             let hitPos = (ball.x - (paddle.x + paddle.width / 2)) / (paddle.width / 2);
-            ball.dx = hitPos * 8;
+            ball.dx = hitPos * 10; // 反射時の横方向の加速を強化
             ball.dy = -Math.abs(ball.dy);
             sounds.paddle.play();
         }
@@ -240,9 +226,11 @@ function update() {
                 b.health--;
                 sounds.brick.play();
                 createParticles(ball.x, ball.y, b.color);
+                
                 if (b.health <= 0) {
                     b.status = 0;
                     score += 10;
+                    shakeDuration = 12; // ブロック破壊でシェイク開始
                     if (b.hasItem) spawnPowerUp(b.x + b.w/2, b.y + b.h/2);
                 }
             }
@@ -276,6 +264,7 @@ function update() {
             document.getElementById("level").innerText = currentLevel;
             initLevel(currentLevel);
             balls = [new Ball(canvas.width / 2, canvas.height - 50, 5, -5)];
+            paddle.x = (canvas.width - paddle.width) / 2;
         } else {
             gameRunning = false;
             sounds.bgm.pause();
@@ -289,7 +278,7 @@ function update() {
 }
 
 function createParticles(x, y, color) {
-    for (let i = 0; i < 12; i++) particles.push(new Particle(x, y, color));
+    for (let i = 0; i < 15; i++) particles.push(new Particle(x, y, color));
 }
 
 function spawnPowerUp(x, y) {
@@ -302,11 +291,11 @@ function spawnPowerUp(x, y) {
 function applyPowerUp(type) {
     sounds.powerup.play();
     if (type === 'EXPAND') {
-        paddle.width = 200;
-        setTimeout(() => paddle.width = 100, 10000);
+        paddle.width = 250; // 拡大時の幅も調整
+        setTimeout(() => paddle.width = 150, 10000); // 元に戻す幅も150に
     } else if (type === 'MULTI') {
-        balls.push(new Ball(paddle.x + paddle.width/2, canvas.height - 50, -5, -5));
-        balls.push(new Ball(paddle.x + paddle.width/2, canvas.height - 50, 5, -5));
+        balls.push(new Ball(paddle.x + paddle.width/2, canvas.height - 50, -6, -6));
+        balls.push(new Ball(paddle.x + paddle.width/2, canvas.height - 50, 6, -6));
     } else if (type === 'PIERCE') {
         paddle.isPenetrating = true;
         setTimeout(() => paddle.isPenetrating = false, 8000);
@@ -316,6 +305,16 @@ function applyPowerUp(type) {
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
+    // シェイク適用開始
+    ctx.save();
+    if (shakeDuration > 0) {
+        const dx = (Math.random() - 0.5) * 15;
+        const dy = (Math.random() - 0.5) * 15;
+        ctx.translate(dx, dy);
+        shakeDuration--;
+    }
+
+    // --- シェイク対象の描画 ---
     // パドル
     ctx.fillStyle = "#00d4ff";
     ctx.shadowBlur = 15;
@@ -331,20 +330,22 @@ function draw() {
         if (b.status === 1) {
             ctx.fillStyle = b.color;
             ctx.fillRect(b.x, b.y, b.w, b.h);
-            ctx.strokeStyle = "rgba(255,255,255,0.5)";
-            ctx.strokeRect(b.x, b.y, b.w, b.h);
+            // 枠線は不要になったので削除（敷き詰めているため）
         }
     });
 
     particles.forEach(p => p.draw());
 
-    // パワーアップアイテムの描画
     powerups.forEach(p => {
         ctx.fillStyle = "#ffff00";
         ctx.font = "bold 16px Arial";
         ctx.textAlign = "center";
         ctx.fillText("⭐ " + p.type, p.x, p.y);
     });
+    // --- シェイク対象ここまで ---
+
+    // シェイク解除
+    ctx.restore();
 
     document.getElementById("score").innerText = score;
 }
