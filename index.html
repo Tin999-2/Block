@@ -1,116 +1,345 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Breakout</title>
+    <title>Super Breakout - Space Edition</title>
     <style>
-        body { background: #1a1a1a; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; color: white; overflow: hidden; touch-action: none; font-family: sans-serif; }
-        canvas { background: #000; border: 2px solid #fff; width: 95vw; max-width: 480px; height: auto; }
-        .ui { display: none; position: absolute; background: rgba(0,0,0,0.95); padding: 30px; text-align: center; border: 3px solid #fff; z-index: 100; border-radius: 10px; }
-        button { padding: 12px 24px; font-size: 1.1rem; cursor: pointer; background: #444; color: white; border: 1px solid #fff; border-radius: 5px; margin-top: 10px; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Arial', sans-serif; }
+        canvas { display: block; margin: 0 auto; background: transparent; position: relative; z-index: 1; }
+        #background-canvas { position: absolute; top: 0; left: 0; z-index: 0; }
+        
+        #ui-overlay {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            z-index: 10; text-align: center; color: white;
+        }
+        .btn {
+            padding: 15px 30px; font-size: 20px; cursor: pointer;
+            background: #00d4ff; border: none; border-radius: 5px; color: #000; font-weight: bold;
+        }
+        #game-info {
+            position: absolute; top: 10px; left: 10px; color: white; z-index: 5; font-size: 18px;
+        }
+        .hidden { display: none; }
+        .keyword { color: #ffeb3b; font-size: 40px; margin: 20px 0; }
     </style>
 </head>
 <body>
-    <div style="margin-bottom:10px;"><h2>
-        Destroy All the Blocks</h2>
-        
-    </div>
-    <canvas id="g" width="480" height="480"></canvas>
-    
-    <div id="clr" class="ui">COMPLETE!<p><h2>Keyword: wall</h2></p>
-    <!-- 
-        <button onclick="location.reload()">Retry</button>
-    -->
-    </div>
-    <div id="ovr" class="ui"><h2>GAME OVER</h2><button onclick="location.reload()">Retry</button></div>
 
-    <script>
-    var cvs = document.getElementById("g");
-    var ctx = cvs.getContext("2d");
-    
-    // --- 速度設定のロジック ---
-    // スマホ（タッチ操作があるか）を判定して速度を分ける
-    var isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-    
-    // PCは 2.5（少し遅く）、スマホは 4.5（速く）に設定
-    var speed = isTouch ? 5.0 : 2.0;
-    
-    var x = 240, y = 440, dx = speed, dy = -speed;
-    var pX = 190, active = true, count = 0;
-    var rows = 5, cols = 8, bW = 50, bH = 20, bP = 8, bOT = 50, bOL = 12;
-    var colors = ['#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#e67e22'];
-    var bricks = [];
+    <canvas id="background-canvas"></canvas>
+    <canvas id="gameCanvas"></canvas>
 
-    for(var c=0; c<cols; c++) {
-        bricks[c] = [];
-        for(var r=0; r<rows; r++) bricks[c][r] = { status: 1 };
+    <div id="game-info">Score: <span id="score">0</span> | Level: <span id="level">1</span></div>
+
+    <div id="ui-overlay">
+        <div id="start-screen">
+            <h1>SUPER BREAKOUT</h1>
+            <button class="btn" onclick="startGame()">START GAME</button>
+        </div>
+        <div id="complete-screen" class="hidden">
+            <h1 style="color: #00ff00;">COMPLETE!</h1>
+            <p>Keyword :</p>
+            <div class="keyword">Wall</div>
+            <button class="btn" onclick="location.reload()">RESTART</button>
+        </div>
+    </div>
+
+<script>
+/** @type {HTMLCanvasElement} */
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const bgCanvas = document.getElementById("background-canvas");
+const bgCtx = bgCanvas.getContext("2d");
+
+// ゲーム設定
+canvas.width = 800;
+canvas.height = 600;
+bgCanvas.width = window.innerWidth;
+bgCanvas.height = window.innerHeight;
+
+// 音声設定
+const sounds = {
+    paddle: new Audio('assets/sounds/paddle_hit.mp3'),
+    brick: new Audio('assets/sounds/brick_hit.mp3'),
+    spawn: new Audio('assets/sounds/powerup_spawn.mp3'),
+    powerup: new Audio('assets/sounds/powerup_get.mp3'),
+    complete: new Audio('assets/sounds/complete.mp3'),
+    bgm: new Audio('assets/sounds/bgm.mp3')
+};
+sounds.bgm.loop = true;
+
+// ゲーム状態
+let score = 0;
+let currentLevel = 1;
+let gameRunning = false;
+let bricks = [];
+let particles = [];
+let powerups = [];
+let balls = [];
+
+const paddle = {
+    width: 100, height: 15, x: (canvas.width - 100) / 2,
+    speed: 8, dx: 0, isPenetrating: false
+};
+
+// クラス定義
+class Ball {
+    constructor(x, y, dx, dy) {
+        this.x = x; this.y = y; this.radius = 8;
+        this.speed = 5; this.dx = dx; this.dy = dy;
+    }
+    draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = paddle.isPenetrating ? "#ff00ff" : "#fff";
+        ctx.fill();
+        ctx.closePath();
+    }
+}
+
+class Brick {
+    constructor(x, y, level) {
+        this.x = x; this.y = y; this.w = 70; this.h = 20;
+        this.status = 1; this.health = 1; this.color = "#00d4ff";
+        this.hasItem = false;
+    }
+}
+
+class Particle {
+    constructor(x, y, color) {
+        this.x = x; this.y = y;
+        this.dx = (Math.random() - 0.5) * 6;
+        this.dy = (Math.random() - 0.5) * 6;
+        this.life = 1.0;
+        this.color = color;
+    }
+    update() { this.x += this.dx; this.y += this.dy; this.life -= 0.02; }
+    draw() {
+        ctx.globalAlpha = this.life;
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, 3, 3);
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+class Meteor {
+    constructor() { this.reset(); }
+    reset() {
+        this.x = Math.random() * bgCanvas.width;
+        this.y = -20;
+        this.speed = 2 + Math.random() * 5;
+        this.len = 10 + Math.random() * 20;
+    }
+    update() {
+        this.x -= this.speed; this.y += this.speed;
+        if (this.y > bgCanvas.height || this.x < -20) this.reset();
+    }
+    draw() {
+        bgCtx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+        bgCtx.lineWidth = 2;
+        bgCtx.beginPath();
+        bgCtx.moveTo(this.x, this.y);
+        bgCtx.lineTo(this.x + this.len, this.y - this.len);
+        bgCtx.stroke();
+    }
+}
+
+const meteors = Array.from({length: 15}, () => new Meteor());
+
+// レベル初期化
+function initLevel(lv) {
+    bricks = [];
+    powerups = [];
+    const rows = 4;
+    const cols = 8;
+    const padding = 10;
+    const offsetTop = 50;
+    const offsetLeft = 85;
+
+    for (let c = 0; c < cols; c++) {
+        for (let r = 0; r < rows; r++) {
+            let b = new Brick(c * (70 + padding) + offsetLeft, r * (20 + padding) + offsetTop);
+            bricks.push(b);
+        }
     }
 
-    function move(e) {
-        var rect = cvs.getBoundingClientRect();
-        var cx = (e.touches ? e.touches[0].clientX : e.clientX);
-        pX = (cx - rect.left) * (480 / rect.width) - 50;
+    if (lv === 2) {
+        // ステージ2: 3つを3回耐久に
+        let targets = Array.from({length: bricks.length}, (_, i) => i).sort(() => 0.5 - Math.random()).slice(0, 3);
+        targets.forEach(i => { bricks[i].health = 3; bricks[i].color = "#ff5722"; });
+    } else if (lv === 3) {
+        // ステージ3: アイテムを隠す
+        let targets = Array.from({length: bricks.length}, (_, i) => i).sort(() => 0.5 - Math.random()).slice(0, 5);
+        targets.forEach(i => { bricks[i].hasItem = true; bricks[i].color = "#e91e63"; });
     }
-    window.onmousemove = move;
-    window.ontouchmove = function(e) { move(e); e.preventDefault(); };
+}
 
-    function draw() {
-        if(!active) return;
-        ctx.clearRect(0, 0, 480, 480);
-        
-        for(var c=0; c<cols; c++) {
-            for(var r=0; r<rows; r++) {
-                var b = bricks[c][r];
-                if(b.status == 1) {
-                    var bx = c*(bW+bP)+bOL;
-                    var by = r*(bH+bP)+bOT;
-                    ctx.fillStyle = colors[r];
-                    ctx.fillRect(bx, by, bW, bH);
-                    if(x > bx && x < bx+bW && y > by && y < by+bH) {
-                        dy = -dy; b.status = 0; count++;
-                        if(count == rows*cols) { 
-                            active = false; 
-                            document.getElementById("clr").style.display="block"; 
-                        }
-                    }
+function startGame() {
+    document.getElementById("start-screen").classList.add("hidden");
+    gameRunning = true;
+    score = 0;
+    currentLevel = 1;
+    balls = [new Ball(canvas.width / 2, canvas.height - 30, 4, -4)];
+    initLevel(1);
+    sounds.bgm.play();
+    update();
+}
+
+// 衝突判定と更新
+function update() {
+    if (!gameRunning) return;
+
+    // パドル移動
+    if (rightPressed && paddle.x < canvas.width - paddle.width) paddle.x += paddle.speed;
+    else if (leftPressed && paddle.x > 0) paddle.x -= paddle.speed;
+
+    balls.forEach((ball, bIdx) => {
+        ball.x += ball.dx;
+        ball.y += ball.dy;
+
+        // 壁反射
+        if (ball.x + ball.radius > canvas.width || ball.x - ball.radius < 0) ball.dx *= -1;
+        if (ball.y - ball.radius < 0) ball.dy *= -1;
+
+        // パドル反射（反射角変化）
+        if (ball.y + ball.radius > canvas.height - paddle.height && ball.x > paddle.x && ball.x < paddle.x + paddle.width) {
+            let hitPos = (ball.x - (paddle.x + paddle.width / 2)) / (paddle.width / 2);
+            ball.dx = hitPos * 7;
+            ball.dy = -Math.abs(ball.dy);
+            sounds.paddle.play();
+        }
+
+        // ブロック衝突
+        bricks.forEach(b => {
+            if (b.status === 1 && ball.x > b.x && ball.x < b.x + b.w && ball.y > b.y && ball.y < b.y + b.h) {
+                if (!paddle.isPenetrating) ball.dy *= -1;
+                b.health--;
+                sounds.brick.play();
+                createParticles(ball.x, ball.y, b.color);
+                
+                if (b.health <= 0) {
+                    b.status = 0;
+                    score += 10;
+                    if (b.hasItem) spawnPowerUp(b.x + b.w/2, b.y + b.h/2);
                 }
             }
-        }
+        });
 
-        ctx.fillStyle = "#fff";
-        ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI*2); ctx.fill();
-        ctx.fillRect(pX, 460, 100, 15);
-
-        if(x+dx > 470 || x+dx < 10) dx = -dx;
-        if(y+dy < 10) dy = -dy;
-        else if(y+dy > 450) {
-            if(x > pX && x < pX+100) { 
-                dy = -speed; // パドルで打つときも設定したスピードを維持
-                y = 449; 
-            }
-            else if(y > 485) { 
-                active = false; 
-                document.getElementById("ovr").style.display="block"; 
+        // 落下
+        if (ball.y > canvas.height) {
+            balls.splice(bIdx, 1);
+            if (balls.length === 0) {
+                alert("GAME OVER");
+                location.reload();
             }
         }
-        x+=dx; y+=dy;
-        requestAnimationFrame(draw);
+    });
+
+    // パワーアップ移動と取得
+    powerups.forEach((p, i) => {
+        p.y += 3;
+        if (p.y > canvas.height - paddle.height && p.x > paddle.x && p.x < paddle.x + paddle.width) {
+            applyPowerUp(p.type);
+            powerups.splice(i, 1);
+        }
+    });
+
+    // パーティクル更新
+    particles.forEach((p, i) => {
+        p.update();
+        if (p.life <= 0) particles.splice(i, 1);
+    });
+
+    // クリア判定
+    if (bricks.every(b => b.status === 0)) {
+        if (currentLevel < 3) {
+            currentLevel++;
+            initLevel(currentLevel);
+            balls = [new Ball(canvas.width / 2, canvas.height - 30, 4, -4)];
+            document.getElementById("level").innerText = currentLevel;
+        } else {
+            gameRunning = false;
+            sounds.bgm.pause();
+            sounds.complete.play();
+            document.getElementById("complete-screen").classList.remove("hidden");
+        }
     }
+
     draw();
-    </script>
+    requestAnimationFrame(update);
+}
+
+function createParticles(x, y, color) {
+    for (let i = 0; i < 10; i++) particles.push(new Particle(x, y, color));
+}
+
+function spawnPowerUp(x, y) {
+    const types = ['EXPAND', 'MULTI', 'PIERCE'];
+    const type = types[Math.floor(Math.random() * types.length)];
+    powerups.push({x, y, type});
+    sounds.spawn.play();
+}
+
+function applyPowerUp(type) {
+    sounds.powerup.play();
+    if (type === 'EXPAND') {
+        paddle.width = 180;
+        sounds.powerup.play(); // パドル拡大音（兼用）
+        setTimeout(() => paddle.width = 100, 10000);
+    } else if (type === 'MULTI') {
+        balls.push(new Ball(paddle.x + paddle.width/2, canvas.height - 40, -4, -4));
+        balls.push(new Ball(paddle.x + paddle.width/2, canvas.height - 40, 4, -4));
+    } else if (type === 'PIERCE') {
+        paddle.isPenetrating = true;
+        setTimeout(() => paddle.isPenetrating = false, 7000);
+    }
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // パドル
+    ctx.fillStyle = "#00d4ff";
+    ctx.fillRect(paddle.x, canvas.height - paddle.height, paddle.width, paddle.height);
+
+    // ボール・ブロック・その他
+    balls.forEach(b => b.draw());
+    bricks.forEach(b => {
+        if (b.status === 1) {
+            ctx.fillStyle = b.color;
+            ctx.fillRect(b.x, b.y, b.w, b.h);
+            ctx.strokeStyle = "#fff";
+            ctx.strokeRect(b.x, b.y, b.w, b.h);
+        }
+    });
+    particles.forEach(p => p.draw());
+    powerups.forEach(p => {
+        ctx.fillStyle = "#ffff00";
+        ctx.font = "bold 12px Arial";
+        ctx.fillText(p.type, p.x, p.y);
+    });
+
+    document.getElementById("score").innerText = score;
+}
+
+// 背景アニメーション
+function animateBackground() {
+    bgCtx.fillStyle = "rgba(0, 0, 0, 0.2)";
+    bgCtx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
+    meteors.forEach(m => { m.update(); m.draw(); });
+    requestAnimationFrame(animateBackground);
+}
+animateBackground();
+
+// 操作系
+let rightPressed = false, leftPressed = false;
+document.addEventListener("keydown", (e) => {
+    if (e.key === "Right" || e.key === "ArrowRight") rightPressed = true;
+    if (e.key === "Left" || e.key === "ArrowLeft") leftPressed = true;
+});
+document.addEventListener("keyup", (e) => {
+    if (e.key === "Right" || e.key === "ArrowRight") rightPressed = false;
+    if (e.key === "Left" || e.key === "ArrowLeft") leftPressed = false;
+});
+</script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
