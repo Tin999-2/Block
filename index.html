@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Super Breakout - Impact Edition</title>
+    <title>Super Breakout - Precision Edition</title>
     <style>
         body { 
             margin: 0; background: #000; font-family: 'Arial', sans-serif; 
@@ -12,7 +12,7 @@
         #gameCanvas { 
             display: block; background: rgba(0, 0, 0, 0.8); position: relative; 
             z-index: 1; border: 5px solid #fff; box-shadow: 0 0 20px rgba(0, 212, 255, 0.6);
-            margin-top: 20px; margin-bottom: 20px; /* 下にも余白を追加 */
+            margin-top: 20px;
         }
         #ui-overlay {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -25,23 +25,28 @@
         }
         #game-info {
             position: sticky; top: 0; width: 100%; text-align: center;
-            color: white; z-index: 5; font-size: 24px; background: rgba(0,0,0,0.7);
+            color: white; z-index: 5; font-size: 24px; background: rgba(0,0,0,0.8);
             padding: 10px 0; border-bottom: 2px solid #333;
         }
         .hidden { display: none; }
         .keyword { color: #ffeb3b; font-size: 40px; margin: 20px 0; }
+        .life-icon { color: #ff4d4d; margin-left: 10px; }
     </style>
 </head>
 <body>
 
-    <div id="game-info">Score: <span id="score">0</span> | Level: <span id="level">1</span></div>
+    <div id="game-info">
+        Score: <span id="score">0</span> | 
+        Level: <span id="level">1</span> | 
+        Lives: <span id="lives" class="life-icon">❤❤❤❤❤</span>
+    </div>
     <canvas id="background-canvas"></canvas>
     <canvas id="gameCanvas"></canvas>
 
     <div id="ui-overlay">
         <div id="start-screen">
             <h1 style="font-size: 48px; text-shadow: 0 0 10px #00d4ff;">SUPER BREAKOUT</h1>
-            <p>Impact Edition</p>
+            <p>5 Lives - Precision Control</p>
             <button class="btn" onclick="startGame()">START GAME</button>
         </div>
         <div id="complete-screen" class="hidden">
@@ -77,25 +82,26 @@ sounds.bgm.loop = true;
 const rowColors = ["#FF595E", "#FFCA3A", "#8AC926", "#1982C4", "#6A4C93", "#F15BB5"];
 
 let score = 0;
+let lives = 5;
 let currentLevel = 1;
 let gameRunning = false;
-let shakeDuration = 0; // シェイク用変数
+let shakeDuration = 0;
 
 let bricks = [];
 let particles = [];
 let powerups = [];
 let balls = [];
 
-// パドル幅を1.5倍に変更 (100 -> 150)
 const paddle = {
     width: 150, height: 15, x: (canvas.width - 150) / 2,
-    speed: 12, dx: 0, isPenetrating: false
+    speed: 10, dx: 0, isPenetrating: false
 };
 
 class Ball {
     constructor(x, y, dx, dy) {
         this.x = x; this.y = y; this.radius = 10;
-        this.dx = dx; this.dy = dy;
+        // 速度を1/2に調整 (以前の5~6から2.5~3程度へ)
+        this.dx = dx * 0.5; this.dy = dy * 0.5;
     }
     draw() {
         ctx.beginPath();
@@ -120,8 +126,8 @@ class Brick {
 class Particle {
     constructor(x, y, color) {
         this.x = x; this.y = y;
-        this.dx = (Math.random() - 0.5) * 10;
-        this.dy = (Math.random() - 0.5) * 10;
+        this.dx = (Math.random() - 0.5) * 6;
+        this.dy = (Math.random() - 0.5) * 6;
         this.life = 1.0;
         this.color = color;
     }
@@ -129,7 +135,7 @@ class Particle {
     draw() {
         ctx.globalAlpha = this.life;
         ctx.fillStyle = this.color;
-        ctx.fillRect(this.x, this.y, 5, 5);
+        ctx.fillRect(this.x, this.y, 4, 4);
         ctx.globalAlpha = 1.0;
     }
 }
@@ -139,7 +145,7 @@ class Meteor {
     reset() {
         this.x = Math.random() * bgCanvas.width;
         this.y = -20;
-        this.speed = 3 + Math.random() * 7;
+        this.speed = 2 + Math.random() * 4;
         this.len = 15 + Math.random() * 30;
     }
     update() {
@@ -162,18 +168,22 @@ function initLevel(lv) {
     bricks = [];
     const rows = 6;
     const cols = 8;
-    // 左右の隙間をなくすため、幅を均等割
-    const brickWidth = canvas.width / cols; 
-    const brickHeight = 30;
-    const padding = 2; // 上下の隙間のみ少し残す
+    const innerGap = 6; // ブロック同士の左右の隙間
+    const rowGap = 4;   // 上下の隙間
     const offsetTop = 80;
+
+    // 計算式: (Canvas幅 - (全隙間の合計)) / 列数
+    // 隙間の数は (cols - 1) 個
+    const brickWidth = (canvas.width - (innerGap * (cols - 1))) / cols;
+    const brickHeight = 30;
 
     for (let c = 0; c < cols; c++) {
         for (let r = 0; r < rows; r++) {
             let color = rowColors[r % rowColors.length];
-            let brickX = c * brickWidth;
-            let brickY = r * (brickHeight + padding) + offsetTop;
-            // Brickコンストラクタに幅と高さを渡すように変更
+            // X座標: (幅 + 隙間) * インデックス。これで端は0から始まる
+            let brickX = c * (brickWidth + innerGap);
+            let brickY = r * (brickHeight + rowGap) + offsetTop;
+            
             let b = new Brick(brickX, brickY, brickWidth, brickHeight, color);
             bricks.push(b);
         }
@@ -192,12 +202,22 @@ function startGame() {
     document.getElementById("start-screen").classList.add("hidden");
     gameRunning = true;
     score = 0;
+    lives = 5;
     currentLevel = 1;
-    paddle.x = (canvas.width - paddle.width) / 2;
-    balls = [new Ball(canvas.width / 2, canvas.height - 50, 5, -5)];
+    updateLivesUI();
+    resetBall();
     initLevel(1);
-    sounds.bgm.play().catch(() => console.log("Audio play deferred"));
+    sounds.bgm.play().catch(() => {});
     update();
+}
+
+function resetBall() {
+    balls = [new Ball(canvas.width / 2, canvas.height - 100, 6, -6)];
+    paddle.x = (canvas.width - paddle.width) / 2;
+}
+
+function updateLivesUI() {
+    document.getElementById("lives").innerText = "❤".repeat(lives);
 }
 
 function update() {
@@ -215,7 +235,7 @@ function update() {
 
         if (ball.y + ball.radius > canvas.height - paddle.height && ball.x > paddle.x && ball.x < paddle.x + paddle.width) {
             let hitPos = (ball.x - (paddle.x + paddle.width / 2)) / (paddle.width / 2);
-            ball.dx = hitPos * 10; // 反射時の横方向の加速を強化
+            ball.dx = hitPos * 5; // 速度1/2に合わせて調整
             ball.dy = -Math.abs(ball.dy);
             sounds.paddle.play();
         }
@@ -230,7 +250,7 @@ function update() {
                 if (b.health <= 0) {
                     b.status = 0;
                     score += 10;
-                    shakeDuration = 12; // ブロック破壊でシェイク開始
+                    shakeDuration = 10;
                     if (b.hasItem) spawnPowerUp(b.x + b.w/2, b.y + b.h/2);
                 }
             }
@@ -239,14 +259,20 @@ function update() {
         if (ball.y > canvas.height) {
             balls.splice(bIdx, 1);
             if (balls.length === 0) {
-                alert("GAME OVER");
-                location.reload();
+                lives--;
+                updateLivesUI();
+                if (lives > 0) {
+                    resetBall();
+                } else {
+                    alert("GAME OVER");
+                    location.reload();
+                }
             }
         }
     });
 
     powerups.forEach((p, i) => {
-        p.y += 4;
+        p.y += 2.5; // アイテムの落下速度も調整
         if (p.y > canvas.height - paddle.height && p.x > paddle.x && p.x < paddle.x + paddle.width) {
             applyPowerUp(p.type);
             powerups.splice(i, 1);
@@ -263,8 +289,7 @@ function update() {
             currentLevel++;
             document.getElementById("level").innerText = currentLevel;
             initLevel(currentLevel);
-            balls = [new Ball(canvas.width / 2, canvas.height - 50, 5, -5)];
-            paddle.x = (canvas.width - paddle.width) / 2;
+            resetBall();
         } else {
             gameRunning = false;
             sounds.bgm.pause();
@@ -278,7 +303,7 @@ function update() {
 }
 
 function createParticles(x, y, color) {
-    for (let i = 0; i < 15; i++) particles.push(new Particle(x, y, color));
+    for (let i = 0; i < 10; i++) particles.push(new Particle(x, y, color));
 }
 
 function spawnPowerUp(x, y) {
@@ -291,11 +316,11 @@ function spawnPowerUp(x, y) {
 function applyPowerUp(type) {
     sounds.powerup.play();
     if (type === 'EXPAND') {
-        paddle.width = 250; // 拡大時の幅も調整
-        setTimeout(() => paddle.width = 150, 10000); // 元に戻す幅も150に
+        paddle.width = 250;
+        setTimeout(() => paddle.width = 150, 10000);
     } else if (type === 'MULTI') {
-        balls.push(new Ball(paddle.x + paddle.width/2, canvas.height - 50, -6, -6));
         balls.push(new Ball(paddle.x + paddle.width/2, canvas.height - 50, 6, -6));
+        balls.push(new Ball(paddle.x + paddle.width/2, canvas.height - 50, -6, -6));
     } else if (type === 'PIERCE') {
         paddle.isPenetrating = true;
         setTimeout(() => paddle.isPenetrating = false, 8000);
@@ -305,16 +330,12 @@ function applyPowerUp(type) {
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // シェイク適用開始
     ctx.save();
     if (shakeDuration > 0) {
-        const dx = (Math.random() - 0.5) * 15;
-        const dy = (Math.random() - 0.5) * 15;
-        ctx.translate(dx, dy);
+        ctx.translate((Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10);
         shakeDuration--;
     }
 
-    // --- シェイク対象の描画 ---
     // パドル
     ctx.fillStyle = "#00d4ff";
     ctx.shadowBlur = 15;
@@ -330,7 +351,6 @@ function draw() {
         if (b.status === 1) {
             ctx.fillStyle = b.color;
             ctx.fillRect(b.x, b.y, b.w, b.h);
-            // 枠線は不要になったので削除（敷き詰めているため）
         }
     });
 
@@ -342,11 +362,8 @@ function draw() {
         ctx.textAlign = "center";
         ctx.fillText("⭐ " + p.type, p.x, p.y);
     });
-    // --- シェイク対象ここまで ---
 
-    // シェイク解除
     ctx.restore();
-
     document.getElementById("score").innerText = score;
 }
 
