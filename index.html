@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Super Breakout - Precision Edition</title>
+    <title>Super Breakout - Life Plus Edition</title>
     <style>
         body { 
             margin: 0; background: #000; font-family: 'Arial', sans-serif; 
@@ -25,12 +25,12 @@
         }
         #game-info {
             position: sticky; top: 0; width: 100%; text-align: center;
-            color: white; z-index: 5; font-size: 24px; background: rgba(0,0,0,0.8);
+            color: white; z-index: 5; font-size: 20px; background: rgba(0,0,0,0.8);
             padding: 10px 0; border-bottom: 2px solid #333;
         }
         .hidden { display: none; }
         .keyword { color: #ffeb3b; font-size: 40px; margin: 20px 0; }
-        .life-icon { color: #ff4d4d; margin-left: 10px; }
+        .life-icon { color: #ff4d4d; margin-left: 10px; letter-spacing: 2px; }
     </style>
 </head>
 <body>
@@ -38,7 +38,7 @@
     <div id="game-info">
         Score: <span id="score">0</span> | 
         Level: <span id="level">1</span> | 
-        Lives: <span id="lives" class="life-icon">❤❤❤❤❤</span>
+        Lives: <span id="lives" class="life-icon">❤❤❤❤❤❤❤❤❤❤</span>
     </div>
     <canvas id="background-canvas"></canvas>
     <canvas id="gameCanvas"></canvas>
@@ -46,7 +46,7 @@
     <div id="ui-overlay">
         <div id="start-screen">
             <h1 style="font-size: 48px; text-shadow: 0 0 10px #00d4ff;">SUPER BREAKOUT</h1>
-            <p>5 Lives - Precision Control</p>
+            <p>10 Lives - Survival Mode</p>
             <button class="btn" onclick="startGame()">START GAME</button>
         </div>
         <div id="complete-screen" class="hidden">
@@ -82,7 +82,7 @@ sounds.bgm.loop = true;
 const rowColors = ["#FF595E", "#FFCA3A", "#8AC926", "#1982C4", "#6A4C93", "#F15BB5"];
 
 let score = 0;
-let lives = 5;
+let lives = 10;
 let currentLevel = 1;
 let gameRunning = false;
 let shakeDuration = 0;
@@ -100,7 +100,6 @@ const paddle = {
 class Ball {
     constructor(x, y, dx, dy) {
         this.x = x; this.y = y; this.radius = 10;
-        // 速度を1/2に調整 (以前の5~6から2.5~3程度へ)
         this.dx = dx * 0.5; this.dy = dy * 0.5;
     }
     draw() {
@@ -120,6 +119,7 @@ class Brick {
         this.x = x; this.y = y; this.w = w; this.h = h;
         this.status = 1; this.health = 1; this.color = color;
         this.hasItem = false;
+        this.hasLifeItem = false; // ライフ回復フラグ
     }
 }
 
@@ -168,32 +168,35 @@ function initLevel(lv) {
     bricks = [];
     const rows = 6;
     const cols = 8;
-    const innerGap = 6; // ブロック同士の左右の隙間
-    const rowGap = 4;   // 上下の隙間
+    const innerGap = 6;
+    const rowGap = 4;
     const offsetTop = 80;
 
-    // 計算式: (Canvas幅 - (全隙間の合計)) / 列数
-    // 隙間の数は (cols - 1) 個
     const brickWidth = (canvas.width - (innerGap * (cols - 1))) / cols;
     const brickHeight = 30;
 
     for (let c = 0; c < cols; c++) {
         for (let r = 0; r < rows; r++) {
             let color = rowColors[r % rowColors.length];
-            // X座標: (幅 + 隙間) * インデックス。これで端は0から始まる
             let brickX = c * (brickWidth + innerGap);
             let brickY = r * (brickHeight + rowGap) + offsetTop;
-            
             let b = new Brick(brickX, brickY, brickWidth, brickHeight, color);
             bricks.push(b);
         }
     }
 
+    // 全ステージ共通：2つのランダムなブロックにライフ回復を入れる
+    let lifeTargets = [...bricks].sort(() => 0.5 - Math.random()).slice(0, 2);
+    lifeTargets.forEach(b => { 
+        b.hasLifeItem = true;
+        // 回復アイテム持ちは少しキラキラさせる演出（任意）
+    });
+
     if (lv === 2) {
-        let targets = bricks.sort(() => 0.5 - Math.random()).slice(0, 3);
+        let targets = bricks.filter(b => !b.hasLifeItem).sort(() => 0.5 - Math.random()).slice(0, 3);
         targets.forEach(b => { b.health = 3; b.color = "#ffffff"; });
     } else if (lv === 3) {
-        let targets = bricks.sort(() => 0.5 - Math.random()).slice(0, 6);
+        let targets = bricks.filter(b => !b.hasLifeItem).sort(() => 0.5 - Math.random()).slice(0, 6);
         targets.forEach(b => { b.hasItem = true; });
     }
 }
@@ -202,7 +205,7 @@ function startGame() {
     document.getElementById("start-screen").classList.add("hidden");
     gameRunning = true;
     score = 0;
-    lives = 5;
+    lives = 10;
     currentLevel = 1;
     updateLivesUI();
     resetBall();
@@ -217,7 +220,7 @@ function resetBall() {
 }
 
 function updateLivesUI() {
-    document.getElementById("lives").innerText = "❤".repeat(lives);
+    document.getElementById("lives").innerText = "❤".repeat(Math.max(0, lives));
 }
 
 function update() {
@@ -235,7 +238,7 @@ function update() {
 
         if (ball.y + ball.radius > canvas.height - paddle.height && ball.x > paddle.x && ball.x < paddle.x + paddle.width) {
             let hitPos = (ball.x - (paddle.x + paddle.width / 2)) / (paddle.width / 2);
-            ball.dx = hitPos * 5; // 速度1/2に合わせて調整
+            ball.dx = hitPos * 5;
             ball.dy = -Math.abs(ball.dy);
             sounds.paddle.play();
         }
@@ -251,7 +254,9 @@ function update() {
                     b.status = 0;
                     score += 10;
                     shakeDuration = 10;
-                    if (b.hasItem) spawnPowerUp(b.x + b.w/2, b.y + b.h/2);
+                    // アイテムドロップ判定
+                    if (b.hasLifeItem) spawnPowerUp(b.x + b.w/2, b.y + b.h/2, 'LIFE');
+                    else if (b.hasItem) spawnPowerUp(b.x + b.w/2, b.y + b.h/2);
                 }
             }
         });
@@ -272,7 +277,7 @@ function update() {
     });
 
     powerups.forEach((p, i) => {
-        p.y += 2.5; // アイテムの落下速度も調整
+        p.y += 2.5;
         if (p.y > canvas.height - paddle.height && p.x > paddle.x && p.x < paddle.x + paddle.width) {
             applyPowerUp(p.type);
             powerups.splice(i, 1);
@@ -306,16 +311,24 @@ function createParticles(x, y, color) {
     for (let i = 0; i < 10; i++) particles.push(new Particle(x, y, color));
 }
 
-function spawnPowerUp(x, y) {
-    const types = ['EXPAND', 'MULTI', 'PIERCE'];
-    const type = types[Math.floor(Math.random() * types.length)];
+function spawnPowerUp(x, y, forcedType = null) {
+    let type;
+    if (forcedType) {
+        type = forcedType;
+    } else {
+        const types = ['EXPAND', 'MULTI', 'PIERCE'];
+        type = types[Math.floor(Math.random() * types.length)];
+    }
     powerups.push({x, y, type});
     sounds.spawn.play();
 }
 
 function applyPowerUp(type) {
     sounds.powerup.play();
-    if (type === 'EXPAND') {
+    if (type === 'LIFE') {
+        if (lives < 10) lives++; // 最大10まで回復
+        updateLivesUI();
+    } else if (type === 'EXPAND') {
         paddle.width = 250;
         setTimeout(() => paddle.width = 150, 10000);
     } else if (type === 'MULTI') {
@@ -357,10 +370,10 @@ function draw() {
     particles.forEach(p => p.draw());
 
     powerups.forEach(p => {
-        ctx.fillStyle = "#ffff00";
+        ctx.fillStyle = p.type === 'LIFE' ? "#ff4d4d" : "#ffff00";
         ctx.font = "bold 16px Arial";
         ctx.textAlign = "center";
-        ctx.fillText("⭐ " + p.type, p.x, p.y);
+        ctx.fillText(p.type === 'LIFE' ? "❤ LIFE" : "⭐ " + p.type, p.x, p.y);
     });
 
     ctx.restore();
