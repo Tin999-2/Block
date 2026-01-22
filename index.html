@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Super Breakout - Stage 2 Focus</title>
+    <title>Super Breakout - Final Tuning</title>
     <style>
         body { 
             margin: 0; background: #000; font-family: 'Arial', sans-serif; 
@@ -46,7 +46,7 @@
     <div id="ui-overlay">
         <div id="start-screen">
             <h1 style="font-size: 48px; text-shadow: 0 0 10px #00d4ff;">SUPER BREAKOUT</h1>
-            <p>Stage 2: Tough Bricks (3 Hits)</p>
+            <p>Stage 3: High Frequency Power-Ups</p>
             <button class="btn" onclick="startGame()">START GAME</button>
         </div>
         <div id="complete-screen" class="hidden">
@@ -72,8 +72,8 @@ bgCanvas.height = window.innerHeight;
 const sounds = {
     paddle: new Audio('assets/sounds/paddle_hit.mp3'),
     brick: new Audio('assets/sounds/brick_hit.mp3'),
-    spawn: new Audio('assets/sounds/powerup_spawn.mp3'),
-    powerup: new Audio('assets/sounds/powerup_get.mp3'),
+    spawn: new Audio('assets/sounds/powerup_spawn.mp3'), // 出現音
+    powerup: new Audio('assets/sounds/powerup_get.mp3'), // 取得音
     complete: new Audio('assets/sounds/complete.mp3'),
     bgm: new Audio('assets/sounds/bgm.mp3')
 };
@@ -119,16 +119,14 @@ class Brick {
         this.x = x; this.y = y; this.w = w; this.h = h;
         this.status = 1; this.health = 1; this.maxHealth = 1;
         this.color = color;
-        this.originalColor = color;
         this.hasItem = false;
         this.hasLifeItem = false;
     }
-    // ダメージを受けた時に色を更新するメソッド
     updateColor() {
-        if (this.maxHealth > 1) {
-            if (this.health === 3) this.color = "#ffffff"; // 初期（白）
-            if (this.health === 2) this.color = "#bdc3c7"; // 1回ヒット（薄グレー）
-            if (this.health === 1) this.color = "#7f8c8d"; // 2回ヒット（濃グレー）
+        if (this.maxHealth === 3) {
+            if (this.health === 3) this.color = "#ffffff";
+            if (this.health === 2) this.color = "#bdc3c7";
+            if (this.health === 1) this.color = "#7f8c8d";
         }
     }
 }
@@ -165,27 +163,23 @@ function initLevel(lv) {
             let color = rowColors[r % rowColors.length];
             let brickX = c * (brickWidth + innerGap);
             let brickY = r * (brickHeight + rowGap) + offsetTop;
-            let b = new Brick(brickX, brickY, brickWidth, brickHeight, color);
-            bricks.push(b);
+            bricks.push(new Brick(brickX, brickY, brickWidth, brickHeight, color));
         }
     }
 
-    // 全ステージ共通：ライフ回復アイテム (2個)
+    // 全ステージ共通：ライフ回復 (2個)
     let lifeTargets = [...bricks].sort(() => 0.5 - Math.random()).slice(0, 2);
     lifeTargets.forEach(b => { b.hasLifeItem = true; });
 
-    // --- ステージ別特殊設定 ---
     if (lv === 2) {
-        // ステージ2: ランダムに選ばれた3つのブロックを3回耐久にする
+        // ステージ2: 3回耐久ブロック (3個)
         let toughTargets = bricks.filter(b => !b.hasLifeItem).sort(() => 0.5 - Math.random()).slice(0, 3);
         toughTargets.forEach(b => { 
-            b.health = 3; 
-            b.maxHealth = 3;
-            b.updateColor(); 
+            b.health = 3; b.maxHealth = 3; b.updateColor(); 
         });
     } else if (lv === 3) {
-        // ステージ3: パワーアップアイテム (6個)
-        let itemTargets = bricks.filter(b => !b.hasLifeItem).sort(() => 0.5 - Math.random()).slice(0, 6);
+        // ステージ3: パワーアップ (10個に増量)
+        let itemTargets = bricks.filter(b => !b.hasLifeItem).sort(() => 0.5 - Math.random()).slice(0, 10);
         itemTargets.forEach(b => { b.hasItem = true; });
     }
 }
@@ -193,9 +187,7 @@ function initLevel(lv) {
 function startGame() {
     document.getElementById("start-screen").classList.add("hidden");
     gameRunning = true;
-    score = 0;
-    lives = 10;
-    currentLevel = 1;
+    score = 0; lives = 10; currentLevel = 1;
     updateLivesUI();
     resetBall();
     initLevel(1);
@@ -218,10 +210,9 @@ function update() {
     if (rightPressed && paddle.x < canvas.width - paddle.width) paddle.x += paddle.speed;
     else if (leftPressed && paddle.x > 0) paddle.x -= paddle.speed;
 
+    // ボールの更新
     balls.forEach((ball, bIdx) => {
-        ball.x += ball.dx;
-        ball.y += ball.dy;
-
+        ball.x += ball.dx; ball.y += ball.dy;
         if (ball.x + ball.radius > canvas.width || ball.x - ball.radius < 0) ball.dx *= -1;
         if (ball.y - ball.radius < 0) ball.dy *= -1;
 
@@ -234,20 +225,15 @@ function update() {
 
         bricks.forEach(b => {
             if (b.status === 1 && ball.x > b.x && ball.x < b.x + b.w && ball.y > b.y && ball.y < b.y + b.h) {
-                // 貫通ボールでないなら跳ね返る
                 if (!paddle.isPenetrating) ball.dy *= -1;
-                
                 b.health--;
                 sounds.brick.play();
                 createParticles(ball.x, ball.y, b.color);
-                
                 if (b.health > 0) {
-                    b.updateColor(); // 耐久ブロックの色を更新
-                    shakeDuration = 5; // 小さなシェイク
+                    b.updateColor();
+                    shakeDuration = 5;
                 } else {
-                    b.status = 0;
-                    score += 10;
-                    shakeDuration = 12; // 破壊時の大きなシェイク
+                    b.status = 0; score += 10; shakeDuration = 12;
                     if (b.hasLifeItem) spawnPowerUp(b.x + b.w/2, b.y + b.h/2, 'LIFE');
                     else if (b.hasItem) spawnPowerUp(b.x + b.w/2, b.y + b.h/2);
                 }
@@ -257,21 +243,29 @@ function update() {
         if (ball.y > canvas.height) {
             balls.splice(bIdx, 1);
             if (balls.length === 0) {
-                lives--;
-                updateLivesUI();
+                lives--; updateLivesUI();
                 if (lives > 0) resetBall();
                 else { alert("GAME OVER"); location.reload(); }
             }
         }
     });
 
-    powerups.forEach((p, i) => {
+    // アイテムの更新
+    for (let i = powerups.length - 1; i >= 0; i--) {
+        let p = powerups[i];
         p.y += 2.5;
-        if (p.y > canvas.height - paddle.height && p.x > paddle.x && p.x < paddle.x + paddle.width) {
+
+        // パドルでキャッチした判定
+        if (p.y > canvas.height - paddle.height && p.y < canvas.height && p.x > paddle.x && p.x < paddle.x + paddle.width) {
+            sounds.powerup.play(); // キャッチした時だけ鳴らす
             applyPowerUp(p.type);
             powerups.splice(i, 1);
+        } 
+        // 画面外に落ちた判定
+        else if (p.y > canvas.height) {
+            powerups.splice(i, 1); // 音は鳴らさず削除
         }
-    });
+    }
 
     particles.forEach((p, i) => {
         p.update();
@@ -280,18 +274,13 @@ function update() {
 
     if (bricks.every(b => b.status === 0)) {
         if (currentLevel < 3) {
-            currentLevel++;
-            document.getElementById("level").innerText = currentLevel;
-            initLevel(currentLevel);
-            resetBall();
+            currentLevel++; document.getElementById("level").innerText = currentLevel;
+            initLevel(currentLevel); resetBall();
         } else {
-            gameRunning = false;
-            sounds.bgm.pause();
-            sounds.complete.play();
+            gameRunning = false; sounds.bgm.pause(); sounds.complete.play();
             document.getElementById("complete-screen").classList.remove("hidden");
         }
     }
-
     draw();
     requestAnimationFrame(update);
 }
@@ -303,11 +292,11 @@ function createParticles(x, y, color) {
 function spawnPowerUp(x, y, forcedType = null) {
     let type = forcedType || ['EXPAND', 'MULTI', 'PIERCE'][Math.floor(Math.random() * 3)];
     powerups.push({x, y, type});
-    sounds.spawn.play();
+    sounds.spawn.play(); // 出現音
 }
 
 function applyPowerUp(type) {
-    sounds.powerup.play();
+    // 取得音は update() 内で鳴らすように変更しました
     if (type === 'LIFE') { if (lives < 10) lives++; updateLivesUI(); }
     else if (type === 'EXPAND') { paddle.width = 250; setTimeout(() => paddle.width = 150, 10000); }
     else if (type === 'MULTI') {
@@ -326,48 +315,31 @@ function draw() {
         ctx.translate((Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10);
         shakeDuration--;
     }
-
-    // パドル
     ctx.fillStyle = "#00d4ff";
-    ctx.shadowBlur = 15;
-    ctx.shadowColor = "#00d4ff";
+    ctx.shadowBlur = 15; ctx.shadowColor = "#00d4ff";
     ctx.fillRect(paddle.x, canvas.height - paddle.height, paddle.width, paddle.height);
     ctx.shadowBlur = 0;
-
-    // ボール
     balls.forEach(b => b.draw());
-
-    // ブロック
     bricks.forEach(b => {
         if (b.status === 1) {
             ctx.fillStyle = b.color;
             ctx.fillRect(b.x, b.y, b.w, b.h);
-            // 耐久ブロックにはヒビのような枠線を入れる
-            if (b.maxHealth > 1) {
-                ctx.strokeStyle = "rgba(0,0,0,0.5)";
-                ctx.strokeRect(b.x, b.y, b.w, b.h);
-            }
         }
     });
-
     particles.forEach(p => p.draw());
     powerups.forEach(p => {
         ctx.fillStyle = p.type === 'LIFE' ? "#ff4d4d" : "#ffff00";
-        ctx.font = "bold 16px Arial";
-        ctx.textAlign = "center";
+        ctx.font = "bold 16px Arial"; ctx.textAlign = "center";
         ctx.fillText(p.type === 'LIFE' ? "❤ LIFE" : "⭐ " + p.type, p.x, p.y);
     });
-
     ctx.restore();
     document.getElementById("score").innerText = score;
 }
 
-// 背景アニメーション
+// 流星背景
 const meteors = Array.from({length: 25}, () => ({
-    x: Math.random() * bgCanvas.width,
-    y: Math.random() * bgCanvas.height,
-    speed: 2 + Math.random() * 4,
-    len: 15 + Math.random() * 30,
+    x: Math.random() * bgCanvas.width, y: Math.random() * bgCanvas.height,
+    speed: 2 + Math.random() * 4, len: 15 + Math.random() * 30,
     reset() { this.x = Math.random() * bgCanvas.width; this.y = -20; }
 }));
 
