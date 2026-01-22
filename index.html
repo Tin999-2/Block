@@ -357,7 +357,11 @@ function animateBackground() {
 }
 animateBackground();
 
+    // --- スクリプトの最後にあるイベントリスナー部分を以下に書き換え ---
+
 let rightPressed = false, leftPressed = false;
+
+// キーボード操作（PC用）
 document.addEventListener("keydown", (e) => {
     if (e.key === "Right" || e.key === "ArrowRight") rightPressed = true;
     if (e.key === "Left" || e.key === "ArrowLeft") leftPressed = true;
@@ -366,6 +370,36 @@ document.addEventListener("keyup", (e) => {
     if (e.key === "Right" || e.key === "ArrowRight") rightPressed = false;
     if (e.key === "Left" || e.key === "ArrowLeft") leftPressed = false;
 });
+
+// タッチ操作（スマホ用）
+canvas.addEventListener("touchmove", (e) => {
+    // 画面のスクロールを防止
+    e.preventDefault();
+    
+    // タッチされた位置を取得
+    const touch = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    const touchX = touch.clientX - rect.left;
+    
+    // パドルの中心を指の位置に合わせる
+    // canvasの表示サイズと内部解像度の比率を計算
+    const scaleX = canvas.width / rect.width;
+    paddle.x = (touchX * scaleX) - (paddle.width / 2);
+
+    // 画面外にはみ出さないよう制限
+    if (paddle.x < 0) paddle.x = 0;
+    if (paddle.x > canvas.width - paddle.width) paddle.x = canvas.width - paddle.width;
+}, { passive: false });
+
+// タッチ開始時も移動させる（タップした場所にパドルが飛ぶ）
+canvas.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    paddle.x = (touch.clientX - rect.left) * scaleX - (paddle.width / 2);
+}, { passive: false });
 </script>
 </body>
 </html>
+
